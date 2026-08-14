@@ -14,6 +14,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readShellRcEnv } from './shell-env.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -63,8 +64,17 @@ function startServer() {
   // node-addon-require-builtin 兜底，但该扩展依赖上游 Node 的 embedder
   // 符号，在 Electron 的 Node 里不可用；显式暴露内部模块即可让加载器
   // 走标准 require 路径。
+  //
+  // GUI 应用不经用户 shell 启动，~/.zshrc 等里的 export 对应用不可见；
+  // 这里静态解析启动文件，把 harness 消费的密钥类变量补进子进程环境。
+  // 只记录变量名，绝不把值写进日志。
+  const shellEnv = readShellRcEnv()
+  const shellEnvNames = Object.keys(shellEnv)
+  if (shellEnvNames.length > 0) {
+    console.log(`[dsh-desktop] shell 启动文件环境变量已加载: ${shellEnvNames.join(', ')}`)
+  }
   server = spawn(process.execPath, ['--expose-internals', DSH_BIN, 'web', '--port', '0'], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: { ...shellEnv, ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 

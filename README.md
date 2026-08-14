@@ -11,6 +11,15 @@ Electron 主进程（自带 Node 运行时）在应用内拉起 `dsh web --port 
 - 关闭窗口（macOS 惯例）= 应用常驻 Dock，点图标重新开窗，秒开。
 - 重复双击 = 聚焦已有窗口（单实例）。
 
+## API 密钥
+
+macOS 图形应用不经 shell 启动，`~/.zshrc` 里的 `export` 对应用进程默认不可见。应用启动时会静态解析常见 shell 启动文件（`~/.zshenv`、`~/.zprofile`、`~/.zshrc`、`~/.bash_profile`、`~/.bashrc`、`~/.profile`）中的 `export` 行，把白名单变量注入 dsh 子进程：
+
+- `DEEPSEEK_API_KEY` —— 模型密钥，免去手动输入；
+- `DEEPSEEK_BASE_URL` —— 可选，自定义接口地址。
+
+只做行解析、不执行 shell，只提取上述两个变量，值不会写入任何日志。例如 `~/.zshrc` 里有 `export DEEPSEEK_API_KEY='sk-...'` 即可自动生效。
+
 ## 开发运行
 
 ```sh
