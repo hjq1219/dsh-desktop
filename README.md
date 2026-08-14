@@ -27,6 +27,8 @@ npm run dist       # 产出当前架构的 .dmg
 npm run dist:all   # 产出 arm64 + x64 两个 DMG（用于发布）
 ```
 
+> `package.json` 里除 `@deepseek-ai/dsh` 外还显式声明了 19 个 `@deepseek-ai/*` 包：它们是 harness 的传递 peer 依赖，electron-builder 收集依赖树时会丢弃未直接声明的 peer 包，导致应用在无父级 node_modules 的环境（如 /Applications）启动失败。升级 `@deepseek-ai/dsh` 时请保持这些版本与之同步。
+
 ## 安装
 
 1. 双击 `dist/*.dmg` → 把 DeepSeek Harness 拖进 Applications。
@@ -38,8 +40,8 @@ npm run dist:all   # 产出 arm64 + x64 两个 DMG（用于发布）
 2. 打 tag 触发构建：
 
 ```sh
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 `.github/workflows/release.yml` 会在 macOS runner 上构建 arm64 + x64 两个 DMG 并挂到 Release 页面。别人下载安装即可，机器上无需 Node。

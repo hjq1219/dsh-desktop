@@ -1,9 +1,10 @@
 {
   "name": "dsh-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "DeepSeek Harness 桌面外壳：把 `dsh web` 封装成 macOS 应用，双击即用，无需 Node / npm / 终端。",
   "author": "DeepSeek Harness Desktop contributors",
+  "packageManager": "npm@11.9.0",
   "type": "module",
   "main": "main.mjs",
   "scripts": {
@@ -14,7 +15,26 @@
     "dist:all": "electron-builder --mac --arm64 --x64"
   },
   "dependencies": {
-    "@deepseek-ai/dsh": "^0.1.0-rc.6"
+    "@deepseek-ai/dsh": "^0.1.0-rc.6",
+    "@deepseek-ai/cordis-plugin-group": "1.0.1",
+    "@deepseek-ai/dsh-anonymous-user-id": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-atomic-write": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-local": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-code-runtime": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-output-retention": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-scope": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-telemetry": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-title-llm": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-shell": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-spill": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subagent-in-process-driver": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-timeout": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-workflow": "0.1.0-rc.6"
   },
   "devDependencies": {
     "electron": "^43.4.0",
