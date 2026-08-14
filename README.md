@@ -23,8 +23,8 @@ npm start     # 开发模式直接跑
 
 ```sh
 npm run pack       # 只产出 .app（自己用，最快）：dist/mac*/DeepSeek Harness.app
-npm run dist       # 产出当前架构的 .dmg + .zip
-npm run dist:all   # 产出 arm64 + x64 两套（用于发布）
+npm run dist       # 产出当前架构的 .dmg
+npm run dist:all   # 产出 arm64 + x64 两个 DMG（用于发布）
 ```
 
 ## 安装

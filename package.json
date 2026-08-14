@@ -43,7 +43,7 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "icon": "build/icon.icns",
-      "target": ["dmg", "zip"]
+      "target": ["dmg"]
     },
     "dmg": {
       "title": "DeepSeek Harness ${version}",
