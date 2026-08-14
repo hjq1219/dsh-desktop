@@ -1,4 +1,7 @@
-// preload.cjs — 把首次引导弹窗（内测声明）的内容替换为产品定制文案。
+// preload.cjs — 桌面外壳的两处界面定制：
+// 1. 把首次引导弹窗（内测声明）的内容替换为产品定制文案；
+// 2. 界面汉化：harness 里三处不走词典的英文标签（Session log 下载按钮、
+//    安全级别、推理等级）在中文界面下显示为中文。
 //
 // 纯 DOM 脚本：不引用任何 Node / Electron API，兼容 sandbox 隔离环境。
 // 识别方式：弹窗内的 h2 标题必须是官方原文（zh/en），且弹窗内没有输入框
@@ -79,7 +82,7 @@
 
   let replacedCount = 0
 
-  function sweep() {
+  function sweepNotice() {
     const dialog = document.querySelector('[role="dialog"]')
     if (dialog === null) return
     if (dialog.querySelector('input, textarea') !== null) return
@@ -90,8 +93,113 @@
     applyCopy(dialog, copy)
   }
 
-  const observer = new MutationObserver(sweep)
+  const noticeObserver = new MutationObserver(sweepNotice)
   // document 在 preload 执行阶段即存在；documentElement 此时可能尚未出现。
-  observer.observe(document, { childList: true, subtree: true })
-  sweep()
+  noticeObserver.observe(document, { childList: true, subtree: true })
+  sweepNotice()
+})();
+
+// —— 界面汉化器 ——
+// harness 里这三处标签不走词典（写死 / 数据派生），在中文界面下由桌面外壳
+// 做显示层替换。语言探针用词典渲染的「新建会话 / New session」按钮，实时
+// 跟随语言切换；替换范围限定在按钮、菜单项、选项与弹窗内，不触碰聊天内容。
+// 切回英文时反向恢复（这些标签 React 不会因语言切换而重置）。
+(() => {
+  const LABELS = new Map([
+    ['Session log', '会话日志'],
+    ['Read Only', '只读'],
+    ['Workspace Write', '工作区可写'],
+    ['Full access', '完全访问'],
+    ['Off', '关闭'],
+    ['High', '高'],
+    ['Max', '最高'],
+  ])
+  const REVERSE = new Map([...LABELS].map(([en, zh]) => [zh, en]))
+  const SCOPE = 'button, [role="menuitem"], [role="menuitemradio"], [role="option"], [role="dialog"]'
+  const ZH_MARKER = '新建会话'
+  const EN_MARKER = 'New session'
+
+  let localeCache = null
+  let pendingRecords = []
+  let flushTimer = null
+  let initialPassDone = false
+
+  function detectLocale() {
+    for (const button of document.querySelectorAll('button')) {
+      const text = (button.getAttribute('aria-label') ?? button.textContent ?? '').trim()
+      if (text === ZH_MARKER) return 'zh'
+      if (text === EN_MARKER) return 'en'
+    }
+    return localeCache
+  }
+
+  /** 弹窗范围内的长句里嵌着 "Full access"，中文界面下做子串替换。 */
+  function translateDialogText(text, locale) {
+    if (locale === 'zh' && text.includes('Full access')) {
+      return text.replaceAll('Full access', '完全访问')
+    }
+    return text
+  }
+
+  function translateNode(node, locale) {
+    const parent = node.parentElement
+    if (parent === null) return
+    const inDialog = parent.closest('[role="dialog"]') !== null
+    if (!inDialog && parent.closest(SCOPE) === null) return
+    const text = node.textContent?.trim() ?? ''
+    if (text === '') return
+    if (locale === 'zh') {
+      const zh = LABELS.get(text)
+      if (zh !== undefined) node.textContent = zh
+      else if (inDialog) {
+        const replaced = translateDialogText(text, 'zh')
+        if (replaced !== text) node.textContent = replaced
+      }
+    } else {
+      const en = REVERSE.get(text)
+      if (en !== undefined) node.textContent = en
+    }
+  }
+
+  function collectNodes(record, target) {
+    if (record.type === 'characterData') {
+      target.add(record.target)
+      return
+    }
+    for (const node of record.addedNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        target.add(node)
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) target.add(walker.currentNode)
+      }
+    }
+  }
+
+  function fullPass(locale) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) translateNode(walker.currentNode, locale)
+  }
+
+  function flush() {
+    flushTimer = null
+    const locale = detectLocale()
+    localeCache = locale
+    if (locale === null) return
+    const records = pendingRecords
+    pendingRecords = []
+    const nodes = new Set()
+    for (const record of records) collectNodes(record, nodes)
+    for (const node of nodes) translateNode(node, locale)
+    if (!initialPassDone) {
+      initialPassDone = true
+      fullPass(locale)
+    }
+  }
+
+  const localizerObserver = new MutationObserver((records) => {
+    pendingRecords.push(...records)
+    if (flushTimer === null) flushTimer = setTimeout(flush, 200)
+  })
+  localizerObserver.observe(document, { childList: true, subtree: true, characterData: true })
 })()

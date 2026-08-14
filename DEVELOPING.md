@@ -27,6 +27,17 @@ git tag v<版本号>
 git push origin v<版本号>
 ```
 
+## 升级 dsh 版本
+
+dsh 官方发布新版本后，桌面应用的依赖升级流程：
+
+1. `npm view @deepseek-ai/dsh version` 查看最新版本；
+2. `package.json` 中 `@deepseek-ai/dsh` 与其余 19 个显式声明的 `@deepseek-ai/*` 包同步改为新版本（它们随 dsh 一起发版）；
+3. `npm install`；
+4. `node scripts/check-deps.mjs` —— 校验版本同步与打包闭包完整性（无打包产物时只检查版本同步）；
+5. 打包并在隔离目录启动回归：内测声明弹窗、界面汉化（`--remote-debugging-port` 配合 `scripts/verify-popup.mjs`、`scripts/verify-i18n.mjs`、`scripts/verify-session-log.mjs` 辅助检查）；
+6. 打 tag 发版，用户经应用更新通道获得新 dsh。
+
 ## 打包依赖说明
 
 `package.json` 里除 `@deepseek-ai/dsh` 外还显式声明了 19 个 `@deepseek-ai/*` 包：它们是 harness 的传递 peer 依赖。electron-builder 收集依赖树时会丢弃未直接声明的 peer 包，导致应用在无父级 node_modules 的环境（如 /Applications）启动即崩溃（`ERR_MODULE_NOT_FOUND`）。显式声明才能保证打包完整；升级 `@deepseek-ai/dsh` 时保持这些版本与之同步。
