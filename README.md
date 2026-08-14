@@ -15,7 +15,7 @@ Electron 主进程（自带 Node 运行时）在应用内拉起 `dsh web --port 
 
 ```sh
 npm install   # 首次
-npm run icon  # 生成 build/icon.png（图标有改动时重跑）
+npm run icon  # 把 assets/icon.png 转成 build/icon.icns（换图标后重跑）
 npm start     # 开发模式直接跑
 ```
 
