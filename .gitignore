@@ -1,0 +1,9 @@
+node_modules/
+dist/
+build/
+.npm-cache/
+.electron-cache/
+.electron-builder-cache/
+.test-home/
+*.log
+.DS_Store
