@@ -25,7 +25,6 @@
     "productName": "DeepSeek Harness",
     "asar": false,
     "npmRebuild": false,
-    "electronDist": "node_modules/electron/dist",
     "directories": {
       "output": "dist"
     },
