@@ -115,14 +115,13 @@
     ['Max', '最高'],
   ])
   const REVERSE = new Map([...LABELS].map(([en, zh]) => [zh, en]))
-  const SCOPE = 'button, [role="menuitem"], [role="menuitemradio"], [role="option"], [role="dialog"]'
   const ZH_MARKER = '新建会话'
   const EN_MARKER = 'New session'
 
   let localeCache = null
-  let pendingRecords = []
-  let flushTimer = null
   let initialPassDone = false
+
+  const SCOPE_SELECTOR = 'button, [role="menuitem"], [role="menuitemradio"], [role="option"], [role="dialog"]'
 
   function detectLocale() {
     for (const button of document.querySelectorAll('button')) {
@@ -145,7 +144,7 @@
     const parent = node.parentElement
     if (parent === null) return
     const inDialog = parent.closest('[role="dialog"]') !== null
-    if (!inDialog && parent.closest(SCOPE) === null) return
+    if (!inDialog && parent.closest(SCOPE_SELECTOR) === null) return
     const text = node.textContent?.trim() ?? ''
     if (text === '') return
     if (locale === 'zh') {
@@ -176,30 +175,46 @@
     }
   }
 
+  /** 快速过滤：与按钮/菜单/选项/弹窗无关的变更（如聊天流式文本）直接跳过。 */
+  function recordRelevant(record) {
+    if (record.type === 'characterData') {
+      const parent = record.target.parentElement
+      return parent !== null
+        && (parent.closest('[role="dialog"]') !== null || parent.closest(SCOPE_SELECTOR) !== null)
+    }
+    for (const node of record.addedNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const parent = node.parentElement
+        if (parent !== null
+          && (parent.closest('[role="dialog"]') !== null || parent.closest(SCOPE_SELECTOR) !== null)) return true
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        if (node.matches(SCOPE_SELECTOR) || node.matches('[role="dialog"]')) return true
+        if (node.querySelector(SCOPE_SELECTOR) !== null || node.querySelector('[role="dialog"]') !== null) return true
+      }
+    }
+    return false
+  }
+
   function fullPass(locale) {
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     while (walker.nextNode()) translateNode(walker.currentNode, locale)
   }
 
-  function flush() {
-    flushTimer = null
+  // 同步处理：MutationObserver 回调在 React 提交之后、浏览器绘制之前执行，
+  // 菜单打开的同一帧内完成替换，用户看不到「英文 → 中文」的变化过程。
+  const localizerObserver = new MutationObserver((records) => {
+    const relevant = records.filter(recordRelevant)
+    if (relevant.length === 0) return
     const locale = detectLocale()
     localeCache = locale
     if (locale === null) return
-    const records = pendingRecords
-    pendingRecords = []
     const nodes = new Set()
-    for (const record of records) collectNodes(record, nodes)
+    for (const record of relevant) collectNodes(record, nodes)
     for (const node of nodes) translateNode(node, locale)
     if (!initialPassDone) {
       initialPassDone = true
       fullPass(locale)
     }
-  }
-
-  const localizerObserver = new MutationObserver((records) => {
-    pendingRecords.push(...records)
-    if (flushTimer === null) flushTimer = setTimeout(flush, 200)
   })
   localizerObserver.observe(document, { childList: true, subtree: true, characterData: true })
 })()
