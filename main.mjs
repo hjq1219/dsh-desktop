@@ -14,7 +14,12 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readShellRcEnv } from './shell-env.mjs'
+import { readShellRcEnv, API_KEY_VAR } from './shell-env.mjs'
+
+// 产品默认语言：中文。Electron 应用未随包附语言文件时，Chromium 会把
+// navigator.language 报成 en-US，导致界面语言检测命中英文。在应用初始化
+// 前强制应用区域为 zh-CN，界面默认即为中文（用户仍可在设置里切换）。
+app.commandLine.appendSwitch('lang', 'zh-CN')
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 
@@ -65,16 +70,20 @@ function startServer() {
   // 符号，在 Electron 的 Node 里不可用；显式暴露内部模块即可让加载器
   // 走标准 require 路径。
   //
-  // GUI 应用不经用户 shell 启动，~/.zshrc 等里的 export 对应用不可见；
-  // 这里静态解析启动文件，把 harness 消费的密钥类变量补进子进程环境。
-  // 只记录变量名，绝不把值写进日志。
-  const shellEnv = readShellRcEnv()
-  const shellEnvNames = Object.keys(shellEnv)
-  if (shellEnvNames.length > 0) {
-    console.log(`[dsh-desktop] shell 启动文件环境变量已加载: ${shellEnvNames.join(', ')}`)
+  // GUI 应用不经用户 shell 启动，~/.zshrc 里的 export 对应用不可见；
+  // 这里读取产品约定的 DEEPSEEK_HARNESS，作为 API 密钥注入子进程
+  // （harness 内部认识的环境变量名是 DEEPSEEK_API_KEY，做一次映射）。
+  // 只记录"已读取"，绝不把密钥值写进日志。
+  const apiKey = readShellRcEnv()
+  if (apiKey !== undefined) {
+    console.log(`[dsh-desktop] 已从 ~/.zshrc 读取 ${API_KEY_VAR}，作为 API 密钥注入`)
   }
   server = spawn(process.execPath, ['--expose-internals', DSH_BIN, 'web', '--port', '0'], {
-    env: { ...shellEnv, ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    env: {
+      ...process.env,
+      ...(apiKey !== undefined && { DEEPSEEK_API_KEY: apiKey }),
+      ELECTRON_RUN_AS_NODE: '1',
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
@@ -136,6 +145,8 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      // 定制首次引导弹窗（内测声明）的文案；纯 DOM 脚本，见 preload.cjs。
+      preload: path.join(here, 'preload.cjs'),
     },
   })
 

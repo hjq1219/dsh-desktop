@@ -1,0 +1,52 @@
+# 开发与发布（面向维护者）
+
+本文档面向维护者，说明构建、打包与发布流程；使用说明见 [README.md](README.md)。
+
+## 开发运行
+
+```sh
+npm install   # 首次
+npm run icon  # 把 assets/icon.png 转成 build/icon.icns（换图标后重跑）
+npm start     # 开发模式直接跑
+```
+
+## 打包
+
+```sh
+npm run pack       # 只产出 .app（最快）：dist/mac*/DeepSeek Harness.app
+npm run dist       # 产出当前架构的 .dmg
+npm run dist:all   # 产出 arm64 + x64 两个 DMG（用于发布）
+```
+
+## 发布到 GitHub Releases
+
+推送 tag 即触发 `.github/workflows/release.yml` 在 macOS runner 上构建 arm64 + x64 两个 DMG 并挂到 Release 页面：
+
+```sh
+git tag v<版本号>
+git push origin v<版本号>
+```
+
+## 打包依赖说明
+
+`package.json` 里除 `@deepseek-ai/dsh` 外还显式声明了 19 个 `@deepseek-ai/*` 包：它们是 harness 的传递 peer 依赖。electron-builder 收集依赖树时会丢弃未直接声明的 peer 包，导致应用在无父级 node_modules 的环境（如 /Applications）启动即崩溃（`ERR_MODULE_NOT_FOUND`）。显式声明才能保证打包完整；升级 `@deepseek-ai/dsh` 时保持这些版本与之同步。
+
+### 界面文案定制
+
+首次引导弹窗（内测声明）的文案由 `preload.cjs` 替换为产品定制内容（中英双语，GitHub Issue 链接指向本仓库）。修改文案只需编辑 `preload.cjs` 后重新打包；识别条件是官方原文标题且弹窗内无输入框。
+
+### 本机沙箱环境构建提示
+
+在受限沙箱中构建时，electron-builder 无法写入默认缓存目录，可用 CLI 覆盖指向本地 Electron 发行版（生产构建无需）：
+
+```sh
+npx electron-builder --dir -c.electronDist=node_modules/electron/dist
+```
+
+## 签名与公证
+
+当前使用 ad-hoc 签名（`build.mac.identity = "-"`）+ hardened runtime entitlements（`entitlements.mac.plist`）。用户首次打开需右键 → 打开。若要「双击直接打开」且免警告，需要 Apple Developer ID（$99/年）+ 公证：在 `package.json` 的 `build.mac` 里配置 `identity` 与 `notarize` 即可。
+
+## 应用内自动更新（未实现）
+
+如需应用内检查更新（electron-updater），需要：`build.mac.target` 加回 `zip`（增量更新依赖 zip + blockmap），并配置 Developer ID 签名与公证（Gatekeeper 校验下载的更新包）。
