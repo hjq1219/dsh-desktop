@@ -38,6 +38,14 @@ dsh 官方发布新版本后，桌面应用的依赖升级流程：
 5. 打包并在隔离目录启动回归：内测声明弹窗、界面汉化（`--remote-debugging-port` 配合 `scripts/verify-popup.mjs`、`scripts/verify-i18n.mjs`、`scripts/verify-session-log.mjs` 辅助检查）；
 6. 打 tag 发版，用户经应用更新通道获得新 dsh。
 
+## 检查更新功能
+
+一期为「GitHub 检查 + 半自动安装」：设置 → 通用 末尾的「检查更新」按钮（preload 注入），主进程 `updater.mjs` 查询 GitHub 最新 Release、下载当前架构 DMG 到「下载」文件夹并自动打开安装包；应用启动时静默检查一次，有新版本时界面顶部显示提示条。文案双语（zh/en）由界面语言探针决定，原生弹窗文案由渲染层传入主进程。
+
+- IPC 通道：`dsh-update:check` / `startup-status` / `download`（进度经 `dsh-update:progress` 事件）/ `dialog` / `open-path` / `open-external`；
+- 测试钩子（环境变量）：`DSH_DESKTOP_CURRENT_VERSION` 伪造当前版本以触发「有新版本」路径；`DSH_DESKTOP_UPDATE_ASSET_URL` / `DSH_DESKTOP_UPDATE_ASSET_NAME` 把下载源指到本地小块文件，避免真实下载 151MB DMG；
+- 将来接 Gitee 镜像或对象存储做国内加速：在 `checkForUpdate` / `downloadDmg` 里加回退链即可，界面层无需改动；全自动更新（替换运行中应用）需要 Apple Developer ID 签名 + 公证。
+
 ## 打包依赖说明
 
 `package.json` 里除 `@deepseek-ai/dsh` 外还显式声明了 19 个 `@deepseek-ai/*` 包：它们是 harness 的传递 peer 依赖。electron-builder 收集依赖树时会丢弃未直接声明的 peer 包，导致应用在无父级 node_modules 的环境（如 /Applications）启动即崩溃（`ERR_MODULE_NOT_FOUND`）。显式声明才能保证打包完整；升级 `@deepseek-ai/dsh` 时保持这些版本与之同步。

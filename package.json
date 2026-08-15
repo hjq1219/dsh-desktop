@@ -52,6 +52,7 @@
       "main.mjs",
       "shell-env.mjs",
       "preload.cjs",
+      "updater.mjs",
       "package.json",
       "node_modules/**",
       "!node_modules/electron/**",
@@ -64,14 +65,25 @@
       "entitlements": "entitlements.mac.plist",
       "entitlementsInherit": "entitlements.mac.plist",
       "icon": "build/icon.icns",
-      "target": ["dmg"]
+      "target": [
+        "dmg"
+      ]
     },
     "dmg": {
       "title": "DeepSeek Harness ${version}",
       "iconSize": 120,
       "contents": [
-        { "x": 150, "y": 190, "type": "file" },
-        { "x": 390, "y": 190, "type": "link", "path": "/Applications" }
+        {
+          "x": 150,
+          "y": 190,
+          "type": "file"
+        },
+        {
+          "x": 390,
+          "y": 190,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     }
   }

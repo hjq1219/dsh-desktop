@@ -218,3 +218,217 @@
   })
   localizerObserver.observe(document, { childList: true, subtree: true, characterData: true })
 })()
+
+// —— 检查更新（设置 → 通用 末尾注入「检查更新」行 + 启动新版本横幅）——
+// 通过沙箱 preload 的 ipcRenderer 与主进程 updater.mjs 通信。
+// 按钮行克隆现有「语言」行保持样式一致：克隆节点无 React fiber，
+// 原有交互自动失效，只响应我们挂的 click。文案随界面语言（zh/en）。
+;(() => {
+  const { ipcRenderer } = require('electron')
+  const RELEASES_URL = 'https://github.com/hjq1219/dsh-desktop/releases'
+
+  const COPY = {
+    zh: {
+      rowLabel: '检查更新',
+      checking: '正在检查…',
+      latestTitle: '已是最新版本',
+      latestMessage: v => `当前版本 v${v} 已是最新`,
+      updateTitle: v => `发现新版本 v${v}`,
+      updateMessage: (cur, next) => `当前版本 v${cur} → v${next}`,
+      updateNow: '立即更新',
+      later: '稍后',
+      downloading: p => `下载中 ${p}%`,
+      checkFailTitle: '检查更新失败',
+      checkFailMessage: '无法访问更新服务器，请检查网络后重试。',
+      openRelease: '打开 Release 页面',
+      cancel: '取消',
+      downloadFailTitle: '下载失败',
+      downloadFailMessage: '下载更新包失败，请稍后重试。',
+      doneTitle: '下载完成',
+      doneMessage: '新版安装包已保存到「下载」文件夹。请打开安装包，把 DeepSeek Harness 拖入「应用程序」覆盖旧版，然后重新打开应用。',
+      openInstaller: '打开安装包',
+      close: '关闭',
+      banner: v => `发现新版本 v${v} · 前往 设置 → 通用 → 检查更新`,
+    },
+    en: {
+      rowLabel: 'Check for Updates',
+      checking: 'Checking…',
+      latestTitle: "You're up to date",
+      latestMessage: v => `Version v${v} is the latest release`,
+      updateTitle: v => `Update available: v${v}`,
+      updateMessage: (cur, next) => `Current version v${cur} → v${next}`,
+      updateNow: 'Update Now',
+      later: 'Later',
+      downloading: p => `Downloading ${p}%`,
+      checkFailTitle: 'Update check failed',
+      checkFailMessage: 'Could not reach the update server. Check your network and try again.',
+      openRelease: 'Open Release Page',
+      cancel: 'Cancel',
+      downloadFailTitle: 'Download failed',
+      downloadFailMessage: 'Failed to download the update. Please try again later.',
+      doneTitle: 'Download complete',
+      doneMessage: 'The installer has been saved to your Downloads folder. Open it, drag DeepSeek Harness into Applications to replace the old version, then relaunch the app.',
+      openInstaller: 'Open Installer',
+      close: 'Close',
+      banner: v => `New version v${v} available · Settings → General → Check for Updates`,
+    },
+  }
+
+  function detectLocale() {
+    for (const button of document.querySelectorAll('button')) {
+      const text = (button.getAttribute('aria-label') ?? button.textContent ?? '').trim()
+      if (text === '新建会话') return 'zh'
+      if (text === 'New session') return 'en'
+    }
+    return null
+  }
+
+  async function showDialog(copy, options) {
+    return ipcRenderer.invoke('dsh-update:dialog', {
+      title: options.title,
+      message: options.message,
+      detail: options.detail ?? '',
+      buttons: options.buttons,
+      defaultId: options.defaultId ?? 0,
+      cancelId: options.cancelId ?? options.buttons.length - 1,
+    })
+  }
+
+  async function onCheckUpdate(control, locale) {
+    const copy = COPY[locale]
+    control.textContent = copy.checking
+    const result = await ipcRenderer.invoke('dsh-update:check')
+    if (!result.ok) {
+      const choice = await showDialog(copy, {
+        title: copy.checkFailTitle,
+        message: copy.checkFailMessage,
+        detail: result.error,
+        buttons: [copy.openRelease, copy.cancel],
+      })
+      if (choice === 0) await ipcRenderer.invoke('dsh-update:open-external', RELEASES_URL)
+      control.textContent = copy.rowLabel
+      return
+    }
+    if (!result.hasUpdate) {
+      await showDialog(copy, {
+        title: copy.latestTitle,
+        message: copy.latestMessage(result.current),
+        buttons: [copy.close],
+      })
+      control.textContent = copy.rowLabel
+      return
+    }
+    const detail = copy.updateMessage(result.current, result.latest)
+      + (result.notes === '' ? '' : `\n\n${result.notes}`)
+    const choice = await showDialog(copy, {
+      title: copy.updateTitle(result.latest),
+      message: detail,
+      buttons: [copy.updateNow, copy.later],
+    })
+    if (choice !== 0 || result.asset === null) {
+      control.textContent = copy.rowLabel
+      return
+    }
+    const onProgress = (_event, progress) => {
+      const pct = progress.total > 0 ? Math.min(99, Math.round(progress.received / progress.total * 100)) : 0
+      control.textContent = copy.downloading(pct)
+    }
+    ipcRenderer.on('dsh-update:progress', onProgress)
+    const download = await ipcRenderer.invoke('dsh-update:download', result.asset)
+    ipcRenderer.removeListener('dsh-update:progress', onProgress)
+    if (!download.ok) {
+      await showDialog(copy, {
+        title: copy.downloadFailTitle,
+        message: copy.downloadFailMessage,
+        detail: download.error,
+        buttons: [copy.close],
+      })
+      control.textContent = copy.rowLabel
+      return
+    }
+    control.textContent = copy.rowLabel
+    const doneChoice = await showDialog(copy, {
+      title: copy.doneTitle,
+      message: copy.doneMessage,
+      buttons: [copy.openInstaller, copy.close],
+    })
+    if (doneChoice === 0) await ipcRenderer.invoke('dsh-update:open-path', download.path)
+  }
+
+  // 在设置 → 通用 区块末尾注入「检查更新」行。
+  function injectUpdateRow() {
+    const locale = detectLocale()
+    if (locale === null) return
+    const label = locale === 'zh' ? '语言' : 'Language'
+    const title = [...document.querySelectorAll('div')].find(
+      el => el.children.length === 0 && (el.textContent ?? '').trim() === label,
+    )
+    if (title === undefined) return
+    const row = title.parentElement?.parentElement
+    const list = row?.parentElement
+    if (list === null || list === undefined) return
+    if (list.dataset.dshUpdateInjected === '1') return
+    // 克隆语言行的行结构（标题 + 控件槽），控件换成设置面板动作区的
+    // 普通 outline 按钮模板（如「打开配置文件」），避免下拉选择器外观
+    const template = document.querySelector('[class*="VOzbGW_actions"] button')
+    if (template === null) return
+    const clone = row.cloneNode(true)
+    const cloneRowText = clone.children[0]
+    const control = clone.children[1]
+    if (cloneRowText === undefined || control === undefined) return
+    cloneRowText.textContent = COPY[locale].rowLabel
+    const button = template.cloneNode(true)
+    button.textContent = COPY[locale].rowLabel
+    button.addEventListener('click', () => { void onCheckUpdate(button, locale) })
+    control.replaceChildren(button)
+    list.appendChild(clone)
+    list.dataset.dshUpdateInjected = '1'
+  }
+
+  // 设置面板出现（通用区块容器在 DOM 里）时尝试注入；关掉重开会重建 DOM 重新注入。
+  const updateObserver = new MutationObserver(() => {
+    if (document.querySelector('[class*="_WvWnq_section"]') !== null) injectUpdateRow()
+  })
+  updateObserver.observe(document, { childList: true, subtree: true })
+
+  // 启动横幅：渲染层就绪后拉取主进程缓存的检查结果。
+  let bannerTries = 0
+  function tryBanner() {
+    if (bannerTries >= 6) return
+    bannerTries += 1
+    console.log("[dsh-desktop] tryBanner attempt " + bannerTries + ", locale=" + detectLocale() + ", body=" + (document.body !== null))
+    if (detectLocale() === null || document.body === null) {
+      setTimeout(tryBanner, 2000)
+      return
+    }
+    void (async () => {
+      let result
+      try {
+        result = await ipcRenderer.invoke("dsh-update:startup-status")
+        console.log("[dsh-desktop] startup-status result: " + JSON.stringify({ ok: result.ok, hasUpdate: result.hasUpdate, error: result.error ?? null }))
+      } catch (error) {
+        console.log("[dsh-desktop] banner invoke failed: " + String(error))
+        return
+      }
+      if (!result.ok || !result.hasUpdate) return
+      const locale = detectLocale() ?? 'zh'
+      const banner = document.createElement('div')
+      banner.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:99999;background:#1e2a4a;color:#fff;padding:10px 16px;border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.35);font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer'
+      banner.textContent = COPY[locale].banner(result.latest)
+      const closeBtn = document.createElement('span')
+      closeBtn.textContent = '✕'
+      closeBtn.style.cssText = 'margin-left:8px;opacity:.7'
+      closeBtn.addEventListener('click', (event) => {
+        event.stopPropagation()
+        banner.remove()
+      })
+      banner.appendChild(closeBtn)
+      banner.addEventListener('click', () => {
+        void ipcRenderer.invoke('dsh-update:open-external', RELEASES_URL)
+        banner.remove()
+      })
+      document.body.appendChild(banner)
+    })()
+  }
+  setTimeout(tryBanner, 3000)
+})()

@@ -15,6 +15,7 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readShellRcEnv, API_KEY_VAR } from './shell-env.mjs'
+import { registerUpdaterIpc, runStartupUpdateCheck } from './updater.mjs'
 
 // 产品默认语言：中文。Electron 应用未随包附语言文件时，Chromium 会把
 // navigator.language 报成 en-US，导致界面语言检测命中英文。在应用初始化
@@ -175,6 +176,8 @@ if (!app.requestSingleInstanceLock()) {
   })
 
   app.whenReady().then(() => {
+    registerUpdaterIpc()
+    runStartupUpdateCheck()
     startServer()
     // macOS 惯例：窗口全关后应用常驻 Dock，点图标重新开窗。
     app.on('activate', () => {
